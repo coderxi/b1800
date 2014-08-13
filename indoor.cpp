@@ -4,6 +4,7 @@
 #include <vector>
 #include <iterator>
 #include <math.h>
+#include <sstream>
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
@@ -333,6 +334,17 @@ int id_main( int argc, char** argv )
     for (unsigned int i=0; i<lp._lines.size(); ++i) {
         c_line &l = lp._lines[i];
 		line(rf_rsl, Point(l.p[0]), Point(l.p[1]), Scalar(255,0,0), 1, CV_AA);
+		{
+            std::stringstream ss;
+            ss << i;
+			string text = ss.str();
+			int fontFace = FONT_HERSHEY_SIMPLEX;
+			double fontScale = 0.5;
+			int thickness = 1;  
+			// cv::Point textOrg(5, 65);
+			cv::Point textOrg = (Point(l.p[0]) + Point(l.p[1])) * 0.5;
+			cv::putText(rf_rsl, text, textOrg, fontFace, fontScale, Scalar(0,0,255), thickness,2);
+		}
 	}
 	imshow("50 - rectify", rf_rsl);
 
