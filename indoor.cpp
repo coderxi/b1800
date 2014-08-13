@@ -64,7 +64,7 @@ struct c_line {
 	Vec2f dir() { return (p[1] - p[0]) * (1 / len()); }
 };
 
-Vec2f xdir(Vec2f dir) { return Vec2f(dir[1], -dir[0]); }
+Vec2f pp_dir(Vec2f dir) { return Vec2f(dir[1], -dir[0]); }
 
 c_line to_line(const Vec4i &l) {
 	c_line line;
@@ -170,38 +170,51 @@ public:
     // cross threshold 0.1, parallel threshold 0.95
     int p30_connect(float r) {
         std::cout << "p30_connect " << r << "\n";
-
-        std::vector<c_line> lines(_lines);
-        lines.reserve(lines.size() * 2);
-
-        // the perpendicular direction of dir
-        std::vector<int> xdirs(2);  // only 2 primary direction
-        xdirs[0] = 1; xdirs[1] = 0;
-
+        std::vector<c_line> lines(_lines);  // original copy
         std::cout << "first, connect all cross lines\n";
         for (unsigned int i=0; i<_lines.size(); ++i) {
             c_line & line_i = _lines[i];
 			Vec2f dir_i = line_i.dir();
-            float ext[2];
-            for (unsigned int j=0; j<_lines.size(); ++j) {
+			float ext[2] = {0,0};
+            // compare with original lines always
+            for (unsigned int j=0; j<lines.size(); ++j) {
                 if (i==j)
                     continue;
-                c_line & line_j = _lines[j];
+                c_line & line_j = lines[j];
                 Vec2f dir_j = line_j.dir();
                 if (dir_i.dot(dir_j) > 0.1) // not perpendicular/cross
                     continue;
 
-				ext[0] = cross_conn(line_i.p[0], -dir_i, r, line_j);
-				ext[1] = cross_conn(line_i.p[1], dir_i, r, line_j);
+				float e = cross_conn(line_i.p[0], -dir_i, r, line_j);
+                if (e > ext[0])
+                    ext[0] = e;
+				e = cross_conn(line_i.p[1], dir_i, r, line_j);
+                if (e > ext[1])
+                    ext[1] = e;
 			}
             if (ext[0] > 0)
                 line_i.p[0] -= ext[0] * dir_i;
             if (ext[1] > 0)
                 line_i.p[1] += ext[0] * dir_i;
 		}
+
+        return _lines.size();
 	}
 
     float cross_conn(Vec2f p, Vec2f dir, float r, c_line l) {
+        Vec2f xdir = pp_dir(dir), ldir = l.dir(), lxdir = pp_dir(ldir);
+        if (lxdir.dot(dir) < 0)
+            lxdir = -lxdir;
+        float ext = (l.p[0] - p).dot(lxdir) / (lxdir.dot(dir));
+        // case 1, too far
+        if (ext < 0 || ext > r)
+            return 0;
+        // case 2, in r radius
+        if (cv::norm(p-l.p[0]) < r || cv::norm(p-l.p[1]) < r)
+            return ext;
+        // case 3, close line,
+        if ((l.p[0] - p).dot(xdir) * (l.p[1] - p).dot(xdir) < 0)
+            return ext;
         return 0;
 	}
 
@@ -315,6 +328,7 @@ int id_main( int argc, char** argv )
     c_lineprocess lp(lines);
     lp.p10_rectify(pdirs, 0.95f);
     lp.p20_snapping(10, 5);
+    lp.p30_connect(60);
     Mat rf_rsl(h, w, CV_8UC3);
     for (unsigned int i=0; i<lp._lines.size(); ++i) {
         c_line &l = lp._lines[i];
