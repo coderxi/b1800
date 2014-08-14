@@ -1,7 +1,9 @@
 #include <iostream>
 #include <fstream>
 #include <set>
+#include <map>
 #include <vector>
+#include <deque>
 #include <iterator>
 #include <math.h>
 #include <sstream>
@@ -64,6 +66,12 @@ struct c_line {
 	Vec2f mid() { return (p[0] + p[1]) * 0.5; }
 	Vec2f dir() { return (p[1] - p[0]) * (1 / len()); }
 };
+
+c_line make_line(Vec2f a, Vec2f b) {
+    c_line line;
+    line.p[0] = a; line.p[1] = b;
+    return line;
+}
 
 Vec2f pp_dir(Vec2f dir) { return Vec2f(dir[1], -dir[0]); }
 
@@ -169,9 +177,12 @@ public:
 
     // connect end points or nearsst line if distance < r
     // cross threshold 0.1, parallel threshold 0.95
-    int p30_connect(float r) {
-        std::cout << "p30_connect " << r << "\n";
+    int p30_cross_connect(float r) {
+        std::cout << "p30_cross_connect " << r << "\n";
         std::vector<c_line> lines(_lines);  // original copy
+        _cross_conns.clear();
+        _cross_conns.resize(lines.size());
+
         std::cout << "first, connect all cross lines\n";
         for (unsigned int i=0; i<_lines.size(); ++i) {
             c_line & line_i = _lines[i];
@@ -181,6 +192,8 @@ public:
             for (unsigned int j=0; j<lines.size(); ++j) {
                 if (i==j)
                     continue;
+                if (i==6 && j==8)
+                    i = 6;
                 c_line & line_j = lines[j];
                 Vec2f dir_j = line_j.dir();
                 if (dir_i.dot(dir_j) > 0.1) // not perpendicular/cross
@@ -193,10 +206,18 @@ public:
                 if (e > ext[1])
                     ext[1] = e;
 			}
-            if (ext[0] > 0)
+            std::cout << "line " << i << ", from " << line_i.p[0] << ", " << line_i.p[1];
+            Vec2i cc(0,0);
+            if (ext[0] > 0) {
                 line_i.p[0] -= ext[0] * dir_i;
-            if (ext[1] > 0)
-                line_i.p[1] += ext[0] * dir_i;
+                cc[0] = 1;
+			}
+            if (ext[1] > 0) {
+                line_i.p[1] += ext[1] * dir_i;
+                cc[1] = 1;
+			}
+            std::cout << ", to " << line_i.p[0] << ", " << line_i.p[1] << "\n";
+            _cross_conns[i] = (cc);
 		}
 
         return _lines.size();
@@ -219,15 +240,77 @@ public:
         return 0;
 	}
 
+    int p40_parallel_connect(float thd) {
+        std::cout << "p40_parallel_connect " << thd << "\n";
+        // auto lines = _lines;
+        _parallel_conns.resize(_lines.size(), Vec2i(0,0));
+        int c = _lines.size();
+        _lines.reserve(c*2);
+        _dirs.reserve(c*2);
+        for (int i=0; i<c-1; ++i) {
+            c_line &line_i = _lines[i];
+            Vec2f dir_i = line_i.dir();
+            for (int j=i+1; j<c; ++j) {
+                c_line &line_j = _lines[j];
+                Vec2f dir_j = line_j.dir();
+
+                if (dir_i.dot(dir_j) < 0.95)     // no parallel nothing to do
+                    continue;
+
+                for (int a=0; a<2; ++a) for (int b=0; b<2; ++b) {
+                    if (_cross_conns[i][a] || _cross_conns[j][b])   // already connect by cross
+                        continue;
+                    if (_parallel_conns[i][a] || _parallel_conns[j][b])   // already connect by cross
+                        continue;
+                    if (cv::norm(line_i.p[a] - line_j.p[b]) < thd)  { // ok connection them
+						// parallel it, hack! adjust 
+						Vec2f xdir = pp_dir(dir_i);
+						Vec2f dir = dir_i;
+						Vec2f &A = line_i.p[a];
+						Vec2f &B = line_j.p[b];
+						Vec2f move = (B-A).dot(dir) * dir * 0.5;
+						A += move;
+						B -= move;
+
+                        _parallel_conns[i][a] = 1;
+                        _parallel_conns[j][b] = 1;
+                        _lines.push_back(make_line(A, B));
+
+                        assert(_dirs[i] == _dirs[j]);
+                        _dirs.push_back((_dirs[i]+1)%2);
+					}
+				}
+			}
+		}
+
+        assert(_dirs.size() == _lines.size());
+        std::cout << "set lines pts follwoing dir.\n";
+        for (int i=0; i<_lines.size(); ++i) {
+            c_line &l = _lines[i];
+            int d = _dirs[i];   assert(d==0 || d==1);
+            Vec2f dir = _pdirs[d];
+            if (dir.dot(l.dir()) < 0)
+                std::swap(l.p[0], l.p[1]);
+            assert(dir.dot(l.dir()) > 0.95);
+		}
+
+        return _lines.size();
+	}
+
     std::vector<c_line> _lines;
     std::vector<Vec2f>  _pdirs;
     std::vector<int>    _dirs;
+    std::vector<Vec2i>  _cross_conns;
+    std::vector<Vec2i>  _parallel_conns;
 };
 
 int id_main( int argc, char** argv )
 {
     // Mat_<double> mat = id_load("e:\\tmp\\001\\newData3\\floorDepth.txt");
-    Mat_<double> mat = id_load("C:/work/tmp/003.rsh/newData/floorDepth.txt");
+    Mat_<double> mat = id_load("e:\\tmp\\001\\WeightedDepth.txt");
+    // Mat_<double> mat = id_load("e:\\tmp\\001\\data2\\floorDepth.txt");
+    // Mat_<double> mat = id_load("e:\\tmp\\001\\realDoorHeight.txt");
+    // Mat_<double> mat = id_load("C:/work/tmp/003.rsh/newData/floorDepth.txt");
     int w = mat.cols, h = mat.rows;
     std::cout << "mat.cols " << w << ", mat.rows " << h << ", width " << mat.size().width << ", height " << mat.size().height << std::endl;
 	imshow("source", mat);
@@ -238,7 +321,7 @@ int id_main( int argc, char** argv )
 		vec.reserve(w*h);
 		each(h, w, [&](int i, int j) { vec.push_back(mat(i,j)); });
 		std::sort(vec.begin(), vec.end());
-		threshold = vec[(int)(vec.size() * 0.9)];
+		threshold = vec[(int)(vec.size() * 0.97)];
         max_value = *vec.rbegin();
 
         std::cout << "ordered image value " << vec.size() << " : \n";
@@ -252,12 +335,14 @@ int id_main( int argc, char** argv )
 
     std::cout << "build edge map for hough detection\n";
     Mat_<unsigned char> edge(h,w);
-	each(h, w, [&](int i, int j) { edge(i,j) = mat(i,j) > threshold ? (unsigned char)(255 * mat(i,j)/max_value) : 0; });
+	// each(h, w, [&](int i, int j) { edge(i,j) = mat(i,j) > threshold ? (unsigned char)(255 * mat(i,j)/max_value) : 0; });
+	each(h, w, [&](int i, int j) { edge(i,j) = mat(i,j) > threshold ? 255 : 0; });
 	imshow("edge", edge);
 
     std::cout << "hough line segment search\n";
 	vector<Vec4i> lines;
-	HoughLinesP(edge, lines, 1, CV_PI/180, 5, 15, 5 );
+	// HoughLinesP(edge, lines, 1, CV_PI/180, 5, 15, 5 );
+	HoughLinesP(edge, lines, 1, CV_PI/180, 9, 10, 10 );
 
     std::cout << "extract and draw line segments\n";
     Mat rsl(h, w, CV_8UC3);
@@ -275,10 +360,25 @@ int id_main( int argc, char** argv )
         num_of_dirs += (int)ceil(d);
 
         // std::cout << "line " << i << " : " << lines[i] << std::endl;
-        if (d > 30)
+        if (d > 50)
 		line( rsl, Point(l[0], l[1]), Point(l[2], l[3]), Scalar(0,0,255), 1, CV_AA);
-
 	}
+
+	{
+        auto l2 = lines;
+        auto li2 = lines_info;
+        l2.clear();
+        li2.clear();
+        for (unsigned int i=0; i<lines.size(); ++i) {
+            if (lines_info[i][2] > 50) {
+                l2.push_back(lines[i]);
+                li2.push_back(lines_info[i]);
+			}
+		}
+        std::swap(lines, l2);
+        std::swap(lines_info, li2);
+	}
+
 	// each(lines.size(), [&](int i) { 
 	// 	std::cout << "line seg " << i << " cos/sin " << lines_info[i] << ", pts " << lines[i] << std::endl; 
 	// });
@@ -298,7 +398,7 @@ int id_main( int argc, char** argv )
     each(lines_info.size(), [&](int i) {
         cv::Vec3f &info = lines_info[i];
         int len = (int)ceil(info[2]);
-        if (len < 30) return;
+        if (len < 50) return;
         auto & vd = vdirs;
         each(len, [&](int j) {   // points number is same as length
             vd.push_back(info[0]);
@@ -329,11 +429,14 @@ int id_main( int argc, char** argv )
     c_lineprocess lp(lines);
     lp.p10_rectify(pdirs, 0.95f);
     lp.p20_snapping(10, 5);
-    lp.p30_connect(60);
+    lp.p30_cross_connect(40);
+    lp.p40_parallel_connect(30);
     Mat rf_rsl(h, w, CV_8UC3);
+    std::cout << "draw line : \n";
     for (unsigned int i=0; i<lp._lines.size(); ++i) {
         c_line &l = lp._lines[i];
 		line(rf_rsl, Point(l.p[0]), Point(l.p[1]), Scalar(255,0,0), 1, CV_AA);
+		std::cout <<  i << "  " << lp._lines[i].p[0] << "  " << lp._lines[i].p[1] << "\n";
 		{
             std::stringstream ss;
             ss << i;
@@ -347,6 +450,63 @@ int id_main( int argc, char** argv )
 		}
 	}
 	imshow("50 - rectify", rf_rsl);
+
+    // hard code door, and build mesh, obj file
+	{
+        std::cout << "build obj file\n";
+        std::map<int, cv::Vec2f> doors;
+        doors[0] = Vec2f(0.3f, 1);
+        doors[8] = Vec2f(0, 0.5f);
+        doors[13] = Vec2f(0.85f, 1);
+        float z0 = -2.13, z1 = 3.4, zd = 0.84;
+        float xunit = 17.831 / 606, yunit = 15.0699 / 512;
+        float x0 = -13.5105, y0 = -9.68499;
+
+        std::vector<c_line> &lines = lp._lines;
+        std::deque<Vec3f> pts;
+        std::deque<Vec4i> rects;
+
+#define RECT(p, q, z, w) do { \
+    int i = pts.size(); \
+    pts.push_back(Vec3f(p[0], p[1], z)); \
+    pts.push_back(Vec3f(q[0], q[1], z)); \
+    pts.push_back(Vec3f(q[0], q[1], w)); \
+    pts.push_back(Vec3f(p[0], p[1], w)); \
+	rects.push_back(Vec4i(i,i+1,i+2,i+3)); } while (0)
+
+        for (int i=0; i<lines.size(); ++i) {
+            c_line &l = lines[i];
+            Vec2f a = l.p[0], b = l.p[1], c, d;
+            a[0] = x0 + xunit * a[0];
+            a[1] = y0 + yunit * a[1];
+            b[0] = x0 + xunit * b[0];
+            b[1] = y0 + yunit * b[1];
+            if (doors.find(i) == doors.end()) // simple case, one rectangle
+                RECT(a, b, z0, z1);
+			else {  // processing door a -- c -(door)- d -- b
+                Vec2f D = doors[i];
+                c = a + (b-a) * D[0];
+                d = a + (b-a) * D[1];
+                RECT(a,c,z0,z1);
+                RECT(c,d,z0,zd);
+                RECT(d,b,z0,z1);
+			}
+		}
+
+        std::cout << "total pts : " << pts.size() << ", total rects : " << rects.size() << "\n";
+
+        std::ofstream out("b1800.obj");
+        for (int i=0; i<pts.size(); ++i) {
+            Vec3f &p = pts[i];
+            out << "v " << p[0] << " " << p[1] << " " << p[2] << "\n";
+		}
+        for (int i=0; i<rects.size(); ++i) {
+            Vec4i &p = rects[i] + Vec4i(1,1,1,1);
+            out << "f " << p[0] << " " << p[1] << " " << p[2] << " " << p[3] << "\n";
+            // out << "f " << p[0] << " " << p[1] << " " << p[2] << "\n";
+            // out << "f " << p[2] << " " << p[3] << " " << p[0] << "\n";
+		}
+	}
 
     std::cout << "detect corner\n";
     Mat corner = Mat::zeros( edge.size(), CV_32FC1);
@@ -377,4 +537,38 @@ int id_main( int argc, char** argv )
     cv::waitKey(0); // Wait for a keystroke in the window
 
     return 0;
+} 
+
+
+// all hard coded
+void build_obj()
+{
+// 0  [430.448, 55.6723]  [519.988, 49.2967]
+// 1  [361.919, 94.8421]  [370.095, 177.255]
+// 2  [344.73, 31.997]  [351.071, 95.9182]
+// 3  [235.494, 127.244]  [259.205, 366.248]
+// 4  [48.1153, 452.057]  [105.885, 447.943]
+// 5  [544.192, 284.546]  [556.641, 410.028]
+// 6  [345.839, 43.1733]  [429.135, 37.2423]
+// 7  [108.971, 22.8069]  [115.281, 86.4039]
+// 8  [253.301, 366.668]  [264.001, 474.53]
+// 9  [30.2519, 491.173]  [578.519, 452.135]
+// 10  [66.0204, 380.003]  [259.205, 366.248]
+// 11  [344.73, 31.997]  [457.038, 24.0003]
+// 12  [517.397, 23.179]  [534.367, 194.234]
+// 13  [356.392, 178.615]  [380.591, 422.541]
+// 14  [370.181, 419.497]  [580.614, 404.514]
+// 15  [27.1052, 91.0098]  [237.775, 76.0094]
+// 16  [429.135, 37.2423]  [430.448, 55.6723]
+// 17  [351.071, 95.9182]  [361.919, 94.8421]
+// 18  [356.392, 178.615]  [370.095, 177.255]
+    // hard code door, and build mesh, obj file
+	{
+        std::map<int, cv::Vec2f> doors;
+        doors[0] = Vec2f(0.3f, 1);
+        doors[8] = Vec2f(0, 0.5f);
+        doors[13] = Vec2f(0.85f, 1);
+        float z0 = -2.13, z1 = 3.4, zd = 0.84;
+        float xunit = 17.831 / 606, yunit = 15.0699 / 512;
+	}
 }
