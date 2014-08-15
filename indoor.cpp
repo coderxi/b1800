@@ -97,6 +97,23 @@ bool merge(c_seg a, c_seg b, float gap, c_seg &seg) {
     return true;
 }
 
+float cross_conn(Vec2f p, Vec2f dir, float r, c_line l) {
+    Vec2f xdir = pp_dir(dir), ldir = l.dir(), lxdir = pp_dir(ldir);
+    if (lxdir.dot(dir) < 0)
+        lxdir = -lxdir;
+    float ext = (l.p[0] - p).dot(lxdir) / (lxdir.dot(dir));
+    // case 1, too far
+    if (ext < 0 || ext > r)
+        return 0;
+    // case 2, in r radius
+    if (cv::norm(p-l.p[0]) < r || cv::norm(p-l.p[1]) < r)
+        return ext;
+    // case 3, close line,
+    if ((l.p[0] - p).dot(xdir) * (l.p[1] - p).dot(xdir) < 0)
+        return ext;
+    return 0;
+}
+
 class c_lineprocess {
 public:
     c_lineprocess(vector<Vec4i> &lines) {
@@ -223,23 +240,6 @@ public:
         return _lines.size();
     }
 
-    float cross_conn(Vec2f p, Vec2f dir, float r, c_line l) {
-        Vec2f xdir = pp_dir(dir), ldir = l.dir(), lxdir = pp_dir(ldir);
-        if (lxdir.dot(dir) < 0)
-            lxdir = -lxdir;
-        float ext = (l.p[0] - p).dot(lxdir) / (lxdir.dot(dir));
-        // case 1, too far
-        if (ext < 0 || ext > r)
-            return 0;
-        // case 2, in r radius
-        if (cv::norm(p-l.p[0]) < r || cv::norm(p-l.p[1]) < r)
-            return ext;
-        // case 3, close line,
-        if ((l.p[0] - p).dot(xdir) * (l.p[1] - p).dot(xdir) < 0)
-            return ext;
-        return 0;
-    }
-
     int p40_parallel_connect(float thd) {
         std::cout << "p40_parallel_connect " << thd << "\n";
         // auto lines = _lines;
@@ -296,6 +296,20 @@ public:
 
         return _lines.size();
     }
+
+    void p50_cross_conn_x(int i, int j) {
+        c_line &line_i = _lines[i];
+        c_line &line_j = _lines[j];
+        Vec2f dir_i = line_i.dir();
+        Vec2f dir_j = line_j.dir();
+        if (fabs(dir_i.dot(dir_j)) > 0.1) return;   // nothing
+		float e = cross_conn(line_i.p[0], -dir_i, 999, line_j);
+        if (e > 0)
+			line_i.p[0] -= e * dir_i;
+		e = cross_conn(line_i.p[1], dir_i, 999, line_j);
+        if (e > 0)
+			line_i.p[1] += e * dir_i;
+	}
 
     std::vector<c_line> _lines;
     std::vector<Vec2f>  _pdirs;
@@ -434,6 +448,11 @@ int id_main( int argc, char** argv )
     lp.p20_snapping(10, 5);
     lp.p30_cross_connect(40);
     lp.p40_parallel_connect(30);
+    // hard code
+    lp.p50_cross_conn_x(0,2);
+    lp.p50_cross_conn_x(2,0);
+    lp.p50_cross_conn_x(2,1);
+    lp.p50_cross_conn_x(1,2);
     Mat rf_rsl(h, w, CV_8UC3);
     std::cout << "draw line : \n";
     for (unsigned int i=0; i<lp._lines.size(); ++i) {
@@ -458,9 +477,12 @@ int id_main( int argc, char** argv )
     {
         std::cout << "build obj file\n";
         std::map<int, cv::Vec2f> doors;
-        doors[0] = Vec2f(0.3f, 1);
-        doors[8] = Vec2f(0, 0.5f);
-        doors[13] = Vec2f(0.85f, 1);
+        doors[9] = Vec2f(0.9f, 1.0f);
+        doors[5] = Vec2f(0.4f, 0.6f);
+        doors[8] = Vec2f(0.5f, 0.8f);
+        // doors[0] = Vec2f(0.3f, 1);
+        // doors[8] = Vec2f(0, 0.5f);
+        // doors[13] = Vec2f(0.85f, 1);
         float z0 = -2.13f, z1 = 3.4f, zd = 0.84f;
         float xunit = 17.831f / 606, yunit = 15.0699f / 512;
         float x0 = -13.5105f, y0 = -9.68499f;
