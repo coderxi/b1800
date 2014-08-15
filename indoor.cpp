@@ -501,7 +501,7 @@ int id_main( int argc, char** argv )
     rects.push_back(Vec4i(i,i+1,i+2,i+3)); } while (0)
 
         for (unsigned int i=0; i<lines.size(); ++i) {
-            if (i == 4)     // skip #4 lines
+            if (i == 3)     // skip #4 lines
                 continue;
             c_line &l = lines[i];
             Vec2f a = l.p[0], b = l.p[1], c, d;
