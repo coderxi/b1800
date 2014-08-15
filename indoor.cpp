@@ -480,6 +480,7 @@ int id_main( int argc, char** argv )
         doors[9] = Vec2f(0.9f, 1.0f);
         doors[5] = Vec2f(0.4f, 0.6f);
         doors[8] = Vec2f(0.5f, 0.8f);
+        doors[12] = Vec2f(0.16f, 0.8f);
         // doors[0] = Vec2f(0.3f, 1);
         // doors[8] = Vec2f(0, 0.5f);
         // doors[13] = Vec2f(0.85f, 1);
