@@ -311,8 +311,8 @@ int id_main( int argc, char** argv )
     // Mat_<double> mat = id_load("e:\\tmp\\001\\realDoorHeight.txt");
     // Mat_<double> mat = id_load("C:/work/tmp/003.rsh/newData/floorDepth.txt");
 
-    // Mat_<double> mat = id_load("e:\\tmp\\001\\WeightedDepth.txt");
-    Mat_<double> mat = id_load("C:/work/tmp/003.rsh/WeightedDepth.txt");
+    Mat_<double> mat = id_load("e:\\tmp\\001\\WeightedDepth.txt");
+    // Mat_<double> mat = id_load("C:/work/tmp/003.rsh/WeightedDepth.txt");
 
     int w = mat.cols, h = mat.rows;
     std::cout << "mat.cols " << w << ", mat.rows " << h << ", width " << mat.size().width << ", height " << mat.size().height << std::endl;
@@ -494,7 +494,7 @@ int id_main( int argc, char** argv )
                 c = a + (b-a) * D[0];
                 d = a + (b-a) * D[1];
                 RECT(a,c,z0,z1);
-                RECT(c,d,z0,zd);
+                RECT(c,d,zd,z1);
                 RECT(d,b,z0,z1);
             }
         }
@@ -510,7 +510,7 @@ int id_main( int argc, char** argv )
 
         std::cout << "total pts : " << pts.size() << ", total rects : " << rects.size() << "\n";
 
-        std::ofstream out("b1800.obj");
+        std::ofstream out("rooms.obj");
         for (unsigned int i=0; i<pts.size(); ++i) {
             Vec3f &p = pts[i];
             out << "v " << p[0] << " " << p[1] << " " << p[2] << "\n";
